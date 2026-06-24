@@ -199,6 +199,38 @@ export default function Home() {
     }
   }, []);
 
+  // Auto-migrate local links to the active workspace key in the database
+  useEffect(() => {
+    if (mounted && rawLinks.length > 0 && workspaceKey && !isAdmin) {
+      try {
+        const myLinks = JSON.parse(localStorage.getItem('flexroute_my_links') || '[]');
+        if (myLinks.length > 0) {
+          // Find links that are in myLinks but don't have this workspaceKey set yet in the database
+          const linksToMigrate = rawLinks.filter(l => myLinks.includes(l.id) && l.userId !== workspaceKey);
+          
+          if (linksToMigrate.length > 0) {
+            Promise.all(linksToMigrate.map(async (link) => {
+              try {
+                await fetch(`/api/links/${link.id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: workspaceKey })
+                });
+              } catch (err) {
+                console.error(`Failed to migrate link ${link.id}`, err);
+              }
+            })).then(() => {
+              // Refresh links list to sync UI state
+              fetchData();
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Error during auto-migration:", e);
+      }
+    }
+  }, [mounted, rawLinks, workspaceKey, isAdmin]);
+
   const handleWorkspaceChange = () => {
     const key = prompt("Enter your Workspace Key (e.g. FR-XXXXXX or custom name) to load your links:", workspaceKey);
     if (key !== null && key.trim() !== "") {
