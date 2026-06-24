@@ -33,8 +33,8 @@ const INITIAL_FORM = {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'links', 'editor'
-  const [links, setLinks] = useState([]);
-  const [analytics, setAnalytics] = useState(null);
+  const [rawLinks, setRawLinks] = useState([]);
+  const [rawAnalytics, setRawAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(INITIAL_FORM);
   const [toast, setToast] = useState(null);
@@ -43,6 +43,121 @@ export default function Home() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   
+  // Computed property to filter links visible to the current view
+  const links = (() => {
+    if (isAdmin) return rawLinks;
+    if (typeof window === 'undefined') return [];
+    try {
+      const myLinks = JSON.parse(localStorage.getItem('flexroute_my_links') || '[]');
+      return rawLinks.filter(l => myLinks.includes(l.id));
+    } catch (e) {
+      return [];
+    }
+  })();
+
+  // Computed property to recalculate statistics for the visible links only
+  const analytics = (() => {
+    if (!rawAnalytics) return null;
+    if (isAdmin) return rawAnalytics;
+
+    if (typeof window === 'undefined') {
+      return {
+        ...rawAnalytics,
+        summary: { totalClicks: 0, uniqueClicks: 0, humanClicks: 0, botClicks: 0 },
+        recentClicks: [],
+        topLinks: [],
+        timeline: [],
+        referrers: [],
+        countries: [],
+        os: { iOS: 0, Android: 0, macOS: 0, Windows: 0, Linux: 0, Other: 0 },
+        devices: { desktop: 0, mobile: 0, tablet: 0 }
+      };
+    }
+
+    try {
+      const myLinks = JSON.parse(localStorage.getItem('flexroute_my_links') || '[]');
+      const myLinkIds = new Set(myLinks);
+
+      // Filter recent clicks to only include clicks belonging to user's links
+      const filteredClicks = (rawAnalytics.recentClicks || []).filter(c => myLinkIds.has(c.linkId));
+
+      // Recalculate Summary
+      const totalClicks = filteredClicks.length;
+      const uniqueIps = new Set(filteredClicks.map(c => c.ip));
+      const uniqueClicks = uniqueIps.size;
+      const botClicks = filteredClicks.filter(c => c.isBot).length;
+      const humanClicks = totalClicks - botClicks;
+
+      // Recalculate OS, Referrer, and Country stats
+      const os = { iOS: 0, Android: 0, macOS: 0, Windows: 0, Linux: 0, Other: 0 };
+      const referrersMap = {};
+      const countriesMap = {};
+
+      filteredClicks.forEach(c => {
+        const system = c.os || 'Other';
+        if (os[system] !== undefined) os[system]++;
+        else os.Other++;
+
+        const ref = c.referrer || 'Direct';
+        referrersMap[ref] = (referrersMap[ref] || 0) + 1;
+
+        const country = c.country || 'Unknown';
+        countriesMap[country] = (countriesMap[country] || 0) + 1;
+      });
+
+      const referrers = Object.entries(referrersMap)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+
+      const countries = Object.entries(countriesMap)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+
+      // Recalculate Timeline (7 Days)
+      const timelineData = {};
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+        timelineData[dateStr] = { date: dateStr, human: 0, bot: 0 };
+      }
+
+      filteredClicks.forEach(c => {
+        const dateStr = c.timestamp.split('T')[0];
+        if (timelineData[dateStr]) {
+          if (c.isBot) {
+            timelineData[dateStr].bot++;
+          } else {
+            timelineData[dateStr].human++;
+          }
+        }
+      });
+
+      const timeline = Object.values(timelineData);
+
+      // Filter top links listing
+      const topLinks = (rawAnalytics.topLinks || []).filter(l => myLinkIds.has(l.id));
+
+      return {
+        ...rawAnalytics,
+        summary: {
+          totalClicks,
+          uniqueClicks,
+          humanClicks,
+          botClicks
+        },
+        recentClicks: filteredClicks,
+        topLinks,
+        timeline,
+        referrers,
+        countries,
+        os
+      };
+    } catch (e) {
+      return rawAnalytics;
+    }
+  })();
+
   // Client mount verification state to prevent hydration errors
   const [mounted, setMounted] = useState(false);
 
@@ -101,8 +216,8 @@ export default function Home() {
       const linksData = await linksRes.json();
       const analyticsData = await analyticsRes.json();
 
-      if (linksData.success) setLinks(linksData.links);
-      if (analyticsData.success) setAnalytics(analyticsData);
+      if (linksData.success) setRawLinks(linksData.links);
+      if (analyticsData.success) setRawAnalytics(analyticsData);
     } catch (e) {
       showToast('Error loading data from API', 'error');
     } finally {
@@ -261,6 +376,20 @@ export default function Home() {
 
       if (data.success) {
         showToast(isEdit ? 'Link updated successfully!' : 'Link created successfully!');
+        
+        // Track newly created link ownership in localStorage
+        if (!isEdit && data.link && data.link.id) {
+          try {
+            const myLinks = JSON.parse(localStorage.getItem('flexroute_my_links') || '[]');
+            if (!myLinks.includes(data.link.id)) {
+              myLinks.push(data.link.id);
+              localStorage.setItem('flexroute_my_links', JSON.stringify(myLinks));
+            }
+          } catch (err) {
+            console.error("Failed to update my links storage", err);
+          }
+        }
+
         setForm(INITIAL_FORM);
         fetchData();
         setActiveTab('links');
@@ -305,6 +434,16 @@ export default function Home() {
       const data = await res.json();
       if (data.success) {
         showToast('Link deleted successfully');
+        
+        // Remove deleted link ownership from localStorage
+        try {
+          const myLinks = JSON.parse(localStorage.getItem('flexroute_my_links') || '[]');
+          const updated = myLinks.filter(lid => lid !== id);
+          localStorage.setItem('flexroute_my_links', JSON.stringify(updated));
+        } catch (err) {
+          console.error("Failed to remove link from storage", err);
+        }
+
         fetchData();
       } else {
         showToast(data.error || 'Could not delete link', 'error');
