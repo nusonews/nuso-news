@@ -128,7 +128,8 @@ async function createLink(linkData) {
     androidUrl: linkData.androidUrl || '',
     customScheme: linkData.customScheme || '',
     routingRules: linkData.routingRules ? JSON.stringify(linkData.routingRules) : '[]',
-    rotatingTargets: linkData.rotatingTargets ? JSON.stringify(linkData.rotatingTargets) : '[]'
+    rotatingTargets: linkData.rotatingTargets ? JSON.stringify(linkData.rotatingTargets) : '[]',
+    userId: linkData.userId || null
   };
 
   if (isSupabaseEnabled()) {
@@ -143,6 +144,7 @@ async function createLink(linkData) {
     // Parse json lists for local consistency
     newLink.routingRules = linkData.routingRules || [];
     newLink.rotatingTargets = linkData.rotatingTargets || [];
+    newLink.userId = linkData.userId || null;
     
     // Prevent duplicate codes
     db.links = db.links.filter(l => l.code !== newLink.code);

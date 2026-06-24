@@ -42,6 +42,7 @@ export default function Home() {
   const [ownerRedirectUrl, setOwnerRedirectUrl] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [workspaceKey, setWorkspaceKey] = useState('');
   
   // Computed property to filter links visible to the current view
   const links = (() => {
@@ -49,7 +50,7 @@ export default function Home() {
     if (typeof window === 'undefined') return [];
     try {
       const myLinks = JSON.parse(localStorage.getItem('flexroute_my_links') || '[]');
-      return rawLinks.filter(l => myLinks.includes(l.id));
+      return rawLinks.filter(l => l.userId === workspaceKey || myLinks.includes(l.id));
     } catch (e) {
       return [];
     }
@@ -79,7 +80,10 @@ export default function Home() {
       const myLinkIds = new Set(myLinks);
 
       // Filter recent clicks to only include clicks belonging to user's links
-      const filteredClicks = (rawAnalytics.recentClicks || []).filter(c => myLinkIds.has(c.linkId));
+      const filteredClicks = (rawAnalytics.recentClicks || []).filter(c => {
+        const link = rawLinks.find(l => l.id === c.linkId);
+        return link && (link.userId === workspaceKey || myLinkIds.has(c.linkId));
+      });
 
       // Recalculate Summary
       const totalClicks = filteredClicks.length;
@@ -136,7 +140,10 @@ export default function Home() {
       const timeline = Object.values(timelineData);
 
       // Filter top links listing
-      const topLinks = (rawAnalytics.topLinks || []).filter(l => myLinkIds.has(l.id));
+      const topLinks = (rawAnalytics.topLinks || []).filter(l => {
+        const link = rawLinks.find(x => x.id === l.id);
+        return link && (link.userId === workspaceKey || myLinkIds.has(l.id));
+      });
 
       return {
         ...rawAnalytics,
@@ -172,6 +179,15 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       setHostUrl(`${window.location.protocol}//${window.location.host}`);
       
+      // Initialize or load workspace key
+      let savedKey = localStorage.getItem('flexroute_workspace_key');
+      if (!savedKey) {
+        const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+        savedKey = `FR-${rand}`;
+        localStorage.setItem('flexroute_workspace_key', savedKey);
+      }
+      setWorkspaceKey(savedKey);
+
       // Check for secret admin access code
       const params = new URLSearchParams(window.location.search);
       const passParam = params.get('pass');
@@ -182,6 +198,18 @@ export default function Home() {
       }
     }
   }, []);
+
+  const handleWorkspaceChange = () => {
+    const key = prompt("Enter your Workspace Key (e.g. FR-XXXXXX or custom name) to load your links:", workspaceKey);
+    if (key !== null && key.trim() !== "") {
+      const cleanKey = key.trim();
+      setWorkspaceKey(cleanKey);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('flexroute_workspace_key', cleanKey);
+      }
+      showToast(`Switched to workspace: ${cleanKey}`);
+    }
+  };
 
   const handleLogout = () => {
     setIsAdmin(false);
@@ -370,7 +398,7 @@ export default function Home() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify({ ...form, userId: workspaceKey })
       });
       const data = await res.json();
 
@@ -601,7 +629,23 @@ export default function Home() {
           )}
         </ul>
 
-        <div className="nav-footer">
+        <div className="nav-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
+          <div style={{ marginBottom: '15px' }}>
+            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.5px' }}>Workspace Key</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '5px' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontFamily: 'monospace', background: 'rgba(255,255,255,0.05)', padding: '3px 6px', borderRadius: '4px', border: '1px solid var(--border-color)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={workspaceKey}>
+                {workspaceKey}
+              </span>
+              <button 
+                onClick={handleWorkspaceChange}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '0.85rem', padding: '2px 4px' }}
+                title="Log in to a different workspace key"
+              >
+                ✏️
+              </button>
+            </div>
+          </div>
+
           <div>Storage Adapter:</div>
           <div>
             {analytics?.databaseMode === 'supabase' ? (
