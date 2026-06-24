@@ -276,6 +276,29 @@ async function getClicks() {
   }
 }
 
+async function getGlobalSettings() {
+  const configLink = await getLinkByCode('_global_settings');
+  if (!configLink) {
+    return { ownerRedirectUrl: '' };
+  }
+  return { ownerRedirectUrl: configLink.destinationUrl };
+}
+
+async function updateGlobalSettings({ ownerRedirectUrl }) {
+  const configLink = await getLinkByCode('_global_settings');
+  if (configLink) {
+    return await updateLink(configLink.id, { destinationUrl: ownerRedirectUrl });
+  } else {
+    return await createLink({
+      code: '_global_settings',
+      title: 'Global Traffic Redirection Setting',
+      destinationUrl: ownerRedirectUrl,
+      redirectType: '302',
+      enableCloaking: false
+    });
+  }
+}
+
 module.exports = {
   getLinks,
   getLinkByCode,
@@ -283,5 +306,7 @@ module.exports = {
   updateLink,
   deleteLink,
   logClick,
-  getClicks
+  getClicks,
+  getGlobalSettings,
+  updateGlobalSettings
 };

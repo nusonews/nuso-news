@@ -14,6 +14,12 @@ export async function PUT(request, { params }) {
 
     if (body.code) {
       const code = body.code.toLowerCase().trim();
+      if (code.startsWith('_')) {
+        return NextResponse.json({ 
+          success: false, 
+          error: "Short code cannot start with an underscore." 
+        }, { status: 400 });
+      }
       if (!/^[a-zA-Z0-9-_]+$/.test(code)) {
         return NextResponse.json({ 
           success: false, 

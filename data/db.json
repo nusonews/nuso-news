@@ -1,0 +1,26 @@
+{
+  "links": [
+    {
+      "id": "gjpvvzz",
+      "code": "_global_settings",
+      "title": "Global Traffic Redirection Setting",
+      "destinationUrl": "https://nuso-news-test-redirection.com",
+      "createdAt": "2026-06-24T16:02:25.494Z",
+      "redirectType": "302",
+      "enableCloaking": false,
+      "safePageTitle": "Latest Tech & Business Updates",
+      "safePageContent": "Welcome to our platform. We provide curated articles on modern business trends, technology, design, and product updates.",
+      "enableNoReferrer": false,
+      "ogTitle": "",
+      "ogDescription": "",
+      "ogImage": "",
+      "deepLinkEnabled": false,
+      "iosUrl": "",
+      "androidUrl": "",
+      "customScheme": "",
+      "routingRules": [],
+      "rotatingTargets": []
+    }
+  ],
+  "clicks": []
+}

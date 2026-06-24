@@ -7,14 +7,18 @@ export async function GET() {
   try {
     const [links, clicks] = await Promise.all([getLinks(), getClicks()]);
 
-    // 1. Core Summary Stats
-    const totalClicks = clicks.length;
+    // Separate secret owner clicks from public stats
+    const publicClicks = clicks.filter(c => c.linkId !== '_global_settings');
+    const ownerRedirectClicks = clicks.filter(c => c.linkId === '_global_settings').length;
+
+    // 1. Core Summary Stats (based on publicClicks)
+    const totalClicks = publicClicks.length;
     
     // Unique clicks based on IP address
-    const uniqueIps = new Set(clicks.map(c => c.ip));
+    const uniqueIps = new Set(publicClicks.map(c => c.ip));
     const uniqueClicks = uniqueIps.size;
 
-    const botClicks = clicks.filter(c => c.isBot).length;
+    const botClicks = publicClicks.filter(c => c.isBot).length;
     const humanClicks = totalClicks - botClicks;
 
     // 2. Click counts per link
@@ -30,7 +34,7 @@ export async function GET() {
       };
     });
 
-    clicks.forEach(c => {
+    publicClicks.forEach(c => {
       if (linkMap[c.linkId]) {
         linkMap[c.linkId].clicksCount++;
         if (c.isBot) {
@@ -52,7 +56,7 @@ export async function GET() {
       timelineData[dateStr] = { date: dateStr, human: 0, bot: 0 };
     }
 
-    clicks.forEach(c => {
+    publicClicks.forEach(c => {
       const dateStr = c.timestamp.split('T')[0];
       if (timelineData[dateStr]) {
         if (c.isBot) {
@@ -71,7 +75,7 @@ export async function GET() {
     const os = { iOS: 0, Android: 0, macOS: 0, Windows: 0, Linux: 0, Other: 0 };
     const countries = {};
 
-    clicks.forEach(c => {
+    publicClicks.forEach(c => {
       // Referrer
       const ref = c.referrer || 'Direct';
       referrers[ref] = (referrers[ref] || 0) + 1;
@@ -108,13 +112,14 @@ export async function GET() {
         humanClicks,
         botClicks
       },
+      ownerRedirectClicks,
       timeline,
       topLinks,
       referrers: referrerList,
       devices,
       os,
       countries: countryList,
-      recentClicks: clicks.slice(0, 50), // Return last 50 clicks for live logs
+      recentClicks: publicClicks.slice(0, 50), // Return last 50 clicks for live logs
       databaseMode: (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) ? 'supabase' : 'local'
     });
   } catch (error) {

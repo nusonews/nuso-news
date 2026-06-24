@@ -6,9 +6,11 @@ export const runtime = 'nodejs';
 export async function GET() {
   try {
     const links = await getLinks();
+    // Filter out config/settings links starting with underscore
+    const publicLinks = links.filter(l => !l.code.startsWith('_'));
     // Sort by creation date descending
-    links.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    return NextResponse.json({ success: true, links });
+    publicLinks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return NextResponse.json({ success: true, links: publicLinks });
   } catch (error) {
     console.error("API GET Links error:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -27,6 +29,12 @@ export async function POST(request) {
     }
 
     const code = body.code.toLowerCase().trim();
+    if (code.startsWith('_')) {
+      return NextResponse.json({ 
+        success: false, 
+        error: "Short code cannot start with an underscore." 
+      }, { status: 400 });
+    }
     if (!/^[a-zA-Z0-9-_]+$/.test(code)) {
       return NextResponse.json({ 
         success: false, 
