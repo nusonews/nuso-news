@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getLinks, getClicks } from '../../../data/db';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET() {
   try {
@@ -121,9 +123,20 @@ export async function GET() {
       countries: countryList,
       recentClicks: publicClicks.slice(0, 50), // Return last 50 clicks for live logs
       databaseMode: (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) ? 'supabase' : 'local'
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     });
   } catch (error) {
     console.error("API GET Analytics error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { 
+      status: 500,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
+      }
+    });
   }
 }

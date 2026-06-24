@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getLinks, createLink } from '../../../data/db';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET() {
   try {
@@ -10,10 +12,21 @@ export async function GET() {
     const publicLinks = links.filter(l => !l.code.startsWith('_'));
     // Sort by creation date descending
     publicLinks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    return NextResponse.json({ success: true, links: publicLinks });
+    return NextResponse.json({ success: true, links: publicLinks }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
   } catch (error) {
     console.error("API GET Links error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { 
+      status: 500,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
+      }
+    });
   }
 }
 

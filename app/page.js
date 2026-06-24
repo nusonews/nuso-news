@@ -93,9 +93,10 @@ export default function Home() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      const t = Date.now();
       const [linksRes, analyticsRes] = await Promise.all([
-        fetch('/api/links'),
-        fetch('/api/analytics')
+        fetch(`/api/links?t=${t}`, { cache: 'no-store' }),
+        fetch(`/api/analytics?t=${t}`, { cache: 'no-store' })
       ]);
       const linksData = await linksRes.json();
       const analyticsData = await analyticsRes.json();
@@ -111,7 +112,7 @@ export default function Home() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/settings');
+      const res = await fetch(`/api/settings?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (data.success && data.settings) {
         setOwnerRedirectUrl(data.settings.ownerRedirectUrl || '');

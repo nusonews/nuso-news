@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getLinkByCode, logClick, getGlobalSettings } from '../../data/db';
 
 export const runtime = 'nodejs'; // Using Nodejs runtime for file operations in local development
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // Custom simple User Agent Parser
 function parseUserAgent(uaString) {
